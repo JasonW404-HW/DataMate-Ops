@@ -1,0 +1,3 @@
+case_no,slide_no,test_type,biopsy_site,slide_path,thumbnail_path
+M26-000001,M26-000001A01,1000,左乳腺,/storage/slides/M26-000001A01.svs,/storage/thumbs/M26-000001A01_preview.jpg
+M26-000001,M26-000001A02,2000,左乳腺,/storage/slides/M26-000001A02.svs,/storage/thumbs/M26-000001A02_preview.jpg

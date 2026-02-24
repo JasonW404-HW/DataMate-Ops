@@ -1,0 +1,25 @@
+name: '病理系统数据预处理算子'
+description: '基于从PIS系统和MIS系统归集的数据表，进行病理系统数据的预处理，得到可用于后续标注任务的病理图片数据集。'
+language: 'python'
+vendor: 'Huawei - Wang Jinglong'
+raw_id: 'PathoSysPreprocess'
+version: '1.0.0'
+modal: 'image'
+inputs: 'multimodal'
+outputs: 'multimodal'
+settings:
+  pathTransformer:
+    name: '路径转换规则'
+    description: 路径转换的规则配置，支持如下三种模式：1. 保持不变："<>"（需要使用这个特殊符号的组合，而不是空字符串，因为空字符串会导致前端认为未填必填项）；2. 源路径为相对路径，需要根据挂载点进行补全："<挂载点绝对路径>", 默认值为"/mnt/ruipath/hospital_data/"；3. 源路径为绝对路径，或存在前缀替换需求的："<原前缀>:<新前缀>"，如 "storage/:/mnt/ruipath/hospital_data/"。此配置项的默认配置为第二种模式，'
+    type: 'input'
+    defaultVal: '/mnt/ruipath/hospital_data/'
+    required: true
+
+  ignoreSdpc:
+    name: '忽略 SDPC 格式的切片'
+    description: '如果不希望使用任何 SDPC 文件，或所有的 SDPC 文件均无法获取对应的缩略图，则选择忽略 SDPC 文件。'
+    type: 'switch'
+    defaultVal: 'false'
+    required: false
+    checkedLabel: '忽略'
+    unCheckedLabel: '保留'

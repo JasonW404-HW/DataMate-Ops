@@ -2,7 +2,7 @@ from patho_sys_preprocess.process import PathoSysPreprocess as TestOperator
 import pandas as pd
 from pathlib import Path
 
-def get_samples(dataset_root="./dataset", source_type = "csv", target_type="csv"):
+def get_samples(dataset_root="./patho_sys_preprocess/dataset", source_type = "csv", target_type="csv"):
     dataset_path = Path(dataset_root).absolute()
     if not dataset_path.exists():
         print(f"Dataset root {dataset_root} does not exist.")
