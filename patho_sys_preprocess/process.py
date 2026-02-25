@@ -11,8 +11,26 @@ from datamate.core.base_op import Mapper
 import pandas as pd
 
 
-LOG_CLEARER_START = ">" * 10 + "\n\n"
-LOG_CLEARER_END = "\n\n" + ">" * 10
+# Custom logger format: Add 🟧🟧🟧 to all log startings and endings.
+class OpsLogger:
+    def __init__(self):
+        self.logger = logger
+        self.prefix = "🟧🟧🟧"
+        self.appendix = "🟦🟦🟦"
+
+    def debug(self, message: str):
+        self.logger.debug(f"{self.prefix} {message} {self.appendix}")
+
+    def info(self, message: str):
+        self.logger.info(f"{self.prefix} {message} {self.appendix}")
+
+    def warning(self, message: str):
+        self.logger.warning(f"{self.prefix} {message} {self.appendix}")
+
+    def error(self, message: str):
+        self.logger.error(f"{self.prefix} {message} {self.appendix}")
+
+ops_logger = OpsLogger()
 
 class PathoSysPreprocess(Mapper):
     """
@@ -65,7 +83,7 @@ class PathoSysPreprocess(Mapper):
         diagnosis_file_name = diagnosis_file_path.name
         diagnosis_file_dir = diagnosis_file_path.parent
 
-        logger.info(f"{LOG_CLEARER_START}❗ Processing file: {diagnosis_file_path}{LOG_CLEARER_END}")
+        ops_logger.info(f"Processing file: {diagnosis_file_path}")
         
         # >>> 读取包含 diagnosis 的 CSV 文件
         #     -----------------------------
@@ -78,51 +96,51 @@ class PathoSysPreprocess(Mapper):
         try:
             slide_file_path = [f for f in os.listdir(diagnosis_file_dir) if f != diagnosis_file_name][0]
         except IndexError:
-            logger.error(f"{LOG_CLEARER_START}No slide CSV file found in the directory.{LOG_CLEARER_END}")
+            ops_logger.error(f"No slide CSV file found in the directory.")
             return sample
         
         slide_info_df = pd.read_csv(os.path.join(diagnosis_file_dir, slide_file_path))
         if not all(col in slide_info_df.columns for col in ["case_no", "slide_path"]):
             return sample
         if not "thumbnail_path" in slide_info_df.columns:
-            logger.warning(f"{LOG_CLEARER_START}No 'thumbnail_path' column found in slide CSV file. All SPDC files will be ignored.{LOG_CLEARER_END}")
+            ops_logger.warning(f"No 'thumbnail_path' column found in slide CSV file. All SPDC files will be ignored.")
             self.ignore_sdpc = True
 
-        logger.info(f"{LOG_CLEARER_START}❗ File read: Diagnosis CSV: {diagnosis_df.shape}{LOG_CLEARER_END}")
-        logger.info(f"{LOG_CLEARER_START}❗ File read: Slide CSV:     {slide_info_df.shape}{LOG_CLEARER_END}")
+        ops_logger.info(f"File read: Diagnosis CSV: {diagnosis_df.shape}")
+        ops_logger.info(f"File read: Slide CSV:     {slide_info_df.shape}")
 
         # >>> 合并 DataFrame 
         #     --------------
 
         merged_df = pd.merge(diagnosis_df, slide_info_df, on="case_no", how="inner")
 
-        logger.info(f"{LOG_CLEARER_START}❗ Data merged: {merged_df.shape}{LOG_CLEARER_END}")
+        ops_logger.info(f"Data merged: {merged_df.shape}")
 
         # >>> 数据处理
         #     -------
         try:
             merged_df = self.data_processing(merged_df)
         except Exception as e:
-            logger.error(f"{LOG_CLEARER_START}Data processing failed: {e}{LOG_CLEARER_END}")
+            ops_logger.error(f"Data processing failed: {e}")
             return sample
         
-        logger.info(f"{LOG_CLEARER_START}❗ Data processed: {merged_df.shape}{LOG_CLEARER_END}")
+        ops_logger.info(f"Data processed: {merged_df.shape}")
 
         # >>> 插入数据记录到数据集
         #     ------------------
         try:
             export_path = sample.get('export_path', None)
             if not export_path:
-                logger.error(f"{LOG_CLEARER_START}Sample missing 'export_path' key or value.{LOG_CLEARER_END}")
+                ops_logger.error(f"Sample missing 'export_path' key or value.")
                 raise ValueError("Sample must contain valid 'export_path' key and value.")
 
             merged_df = self.insert_into_dataset(merged_df, Path(export_path))
 
         except Exception as e:
-            logger.error(f"{LOG_CLEARER_START}Failed to insert records into dataset: {e}{LOG_CLEARER_END}")
+            ops_logger.error(f"Failed to insert records into dataset: {e}")
             return sample
         
-        logger.info(f"{LOG_CLEARER_START}❗ Data inserted into dataset: {merged_df.shape}{LOG_CLEARER_END}")
+        ops_logger.info(f"Data inserted into dataset: {merged_df.shape}")
 
         # >>> 更新 sample
         #     -----------
@@ -130,7 +148,7 @@ class PathoSysPreprocess(Mapper):
         sample["fileName"] = f"case_diagnosis_slides.json"
         sample["fileType"] = "json"
 
-        logger.info(f"{LOG_CLEARER_START}❗ Sample updated with processed data.{LOG_CLEARER_END}")
+        ops_logger.info(f"Sample updated with processed data.")
 
         return sample
     
@@ -196,10 +214,10 @@ class PathoSysPreprocess(Mapper):
                     updated_str = path_str.replace(old_prefix, new_prefix, 1)
                     return str(Path(updated_str))
                 else:
-                    print(f"Warning: Prefix '{old_prefix}' not found in '{known_path}'")
+                    ops_logger.warning(f"Warning: Prefix '{old_prefix}' not found in '{known_path}'")
                     return known_path
             except ValueError:
-                print("Error: Invalid mapping format. Use 'old:new'")
+                ops_logger.error("Error: Invalid mapping format. Use 'old:new'")
                 return known_path
 
         # 模式1：作为父目录添加为前缀
@@ -217,7 +235,7 @@ class PathoSysPreprocess(Mapper):
         API_URL = f"http://datamate-backend:8080/api/data-management/datasets/{export_path.name}/files/upload/add"
         BATCH_SIZE = 1000
 
-        logger.info(f"{LOG_CLEARER_START}DataMate connection API URL: {API_URL} | Batch Size: {BATCH_SIZE}")
+        ops_logger.info(f"DataMate connection API URL: {API_URL} | Batch Size: {BATCH_SIZE}")
 
         for start_idx in range(0, len(merged_df), BATCH_SIZE):
             end_idx = min(start_idx + BATCH_SIZE, len(merged_df))
@@ -235,35 +253,28 @@ class PathoSysPreprocess(Mapper):
                 thumb_records.append({"filePath": row["thumbnail_path"]})  # Thumbnails File
 
             try:
-                logger.info(f"{LOG_CLEARER_START}Uploading batch {start_idx}-{end_idx}: {len(slide_records)} slide records {LOG_CLEARER_END}")
-                response = httpx.post(API_URL, json={"files": slide_records})
-                response.raise_for_status()
-                logger.info(f"{LOG_CLEARER_START}Successfully uploaded slide records for batch {start_idx}-{end_idx}{LOG_CLEARER_END}")
-            except httpx.HTTPStatusError as e:
-                response_body = e.response.text if e.response else "N/A"
-                curl_cmd = f'curl -X POST "{API_URL}" -H "Content-Type: application/json" -d \'{json.dumps({"files": slide_records}, ensure_ascii=False)}\' '
-                logger.error(f"{LOG_CLEARER_START}HTTP error uploading slide records (batch {start_idx}-{end_idx}): {e}\nResponse body: {response_body}\nDebug curl: {curl_cmd}{LOG_CLEARER_END}")
-            except httpx.HTTPError as e:
-                curl_cmd = f'curl -X POST "{API_URL}" -H "Content-Type: application/json" -d \'{json.dumps({"files": slide_records}, ensure_ascii=False)}\' '
-                logger.error(f"{LOG_CLEARER_START}HTTP error uploading slide records (batch {start_idx}-{end_idx}): {e}\nDebug curl: {curl_cmd}{LOG_CLEARER_END}")
-            except Exception as e:
-                curl_cmd = f'curl -X POST "{API_URL}" -H "Content-Type: application/json" -d \'{json.dumps({"files": slide_records}, ensure_ascii=False)}\' '
-                logger.error(f"{LOG_CLEARER_START}Failed to upload slide records (batch {start_idx}-{end_idx}): {e}\nDebug curl: {curl_cmd}{LOG_CLEARER_END}")
+                for t in ["slide", "thumbnail"]:
+                    data = slide_records if t == "slide" else thumb_records
+                    ops_logger.info(f"Uploading batch {start_idx}-{end_idx}: {len(data)} [[ {t} ]] records ")
 
-            try:
-                logger.info(f"{LOG_CLEARER_START}Uploading batch {start_idx}-{end_idx}: {len(thumb_records)} thumbnail records")
-                response = httpx.post(API_URL, json={"files": thumb_records})
-                response.raise_for_status()
-                logger.info(f"{LOG_CLEARER_START}Successfully uploaded thumbnail records for batch {start_idx}-{end_idx}{LOG_CLEARER_END}")
+                    request_body = {"files": data}
+                    request_body_str = json.dumps(request_body, ensure_ascii=False)
+
+                    curl_cmd = f'curl -X POST "{API_URL}" -H "Content-Type: application/json" -d \'{request_body_str}\' '
+                    ops_logger.debug(f"Debug curl command for {t} records (batch {start_idx}-{end_idx}): {curl_cmd}")
+
+                    response = httpx.post(API_URL, json={"files": data})
+                    response.raise_for_status()
+
+                    ops_logger.info(f"Successfully uploaded {t} records for batch {start_idx}-{end_idx}")
+
             except httpx.HTTPStatusError as e:
                 response_body = e.response.text if e.response else "N/A"
-                curl_cmd = f'curl -X POST "{API_URL}" -H "Content-Type: application/json" -d \'{json.dumps({"files": thumb_records}, ensure_ascii=False)}\' '
-                logger.error(f"{LOG_CLEARER_START}HTTP error uploading thumbnail records (batch {start_idx}-{end_idx}): {e}\nResponse body: {response_body}\nDebug curl: {curl_cmd}{LOG_CLEARER_END}")
+                ops_logger.error(f"HTTP error uploading {t} records (batch {start_idx}-{end_idx}): {e}")
+                ops_logger.error(f"Response body: {response_body}")
             except httpx.HTTPError as e:
-                curl_cmd = f'curl -X POST "{API_URL}" -H "Content-Type: application/json" -d \'{json.dumps({"files": thumb_records}, ensure_ascii=False)}\' '
-                logger.error(f"{LOG_CLEARER_START}HTTP error uploading thumbnail records (batch {start_idx}-{end_idx}): {e}\nDebug curl: {curl_cmd}{LOG_CLEARER_END}")
+                ops_logger.error(f"HTTP error uploading {t} records (batch {start_idx}-{end_idx}): {e}")
             except Exception as e:
-                curl_cmd = f'curl -X POST "{API_URL}" -H "Content-Type: application/json" -d \'{json.dumps({"files": thumb_records}, ensure_ascii=False)}\' '
-                logger.error(f"{LOG_CLEARER_START}Failed to upload thumbnail records (batch {start_idx}-{end_idx}): {e}\nDebug curl: {curl_cmd}{LOG_CLEARER_END}")
+                ops_logger.error(f"Failed to upload {t} records (batch {start_idx}-{end_idx}): {e}")
 
         return merged_df

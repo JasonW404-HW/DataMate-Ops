@@ -1,267 +1,148 @@
-# 自定义算子开发规范指南
+# 病理系统数据预处理算子 — 用户指南
 
-本文档旨在为开发者提供一套标准的自定义数据处理算子开发规范。通过遵循本指南，您可以开发出能够无缝集成到数据处理系统中的高质量算子。
+## 快速开始 (How to Use)
 
-## 1. 目录结构规范
-
-一个标准的算子开发包（Package）应包含以下核心文件。请确保文件命名准确，以便系统正确识别。
-
-```text
-operator_package/
-├── __init__.py        # [必要] 算子注册入口，用于将算子注册到全局工厂
-├── metadata.yml       # [必要] 算子元数据、UI 参数定义及资源配置
-├── process.py         # [必要] 算子核心逻辑代码
-├── requirements.txt   # [可选] 算子运行所需的第三方 Python 依赖
-└── README.md          # [可选] 算子功能说明文档
-
-```
+1. **环境准备**：请注意，本算子涉及到 DataMate 平台数据集文件添加的操作，因此请确保在宿主机环境和 **DataMate Backend** 容器环境中均可访问医院图像存储路径。**请记录医院图像存储在容器中的路径。**
+2. **准备 CSV 文件**：将 诊断 CSV (Diagnosis CSV) 和 切片 CSV (Slide CSV) 存放在同一数据集中。如果是通过 DataMate 的数据归集功能获得的文件，则请务必将归集目标数据集设置为同一个。
+3. **在 DataMate 页面上创建任务**：
+    - **添加算子**: 在 DataMate 的“算子市场”中上传本算子并发布。
+    - **清洗任务**：使用步骤 *2* 中的数据集作为源数据集。在 DataMate 的“数据清洗”-“创建清洗任务”-“配置清洗流程”区域，选择本算子。设置 `pathTransformer` 和 `ignoreSdpc`。创建清洗任务。
+      - `pathTranformer`：具体配置方法请参考下文。**注意**：请务必再三检查医院图像存储路径是否填写正确。
+        - **是容器中的路径，不是宿主机上的路径！**
+        - **是容器中的路径，不是宿主机上的路径！**
+        - **是容器中的路径，不是宿主机上的路径！**
+4. **检查结果**：在目标数据集中，检查是否有一个包含了所有图片路径和信息的TXT文件（实质内容为CSV数据），以及若干WSI图片及其缩略图。
 
 ---
 
-## 2. 元数据与配置 (metadata.yml)
+## 本地开发与调试 (Developers Only)
 
-`metadata.yml` 定义了算子在系统中的“身份”、前端显示的配置组件以及运行时资源限制。
+开发者可以 clone 本项目到本地，通过运行项目根目录下的 `main.py` 来模拟平台环境并调试算子逻辑。
 
-### 2.1 基础信息配置
+### 1. 环境准备
 
-| 字段 | 说明                                 | 示例 |
-| --- |------------------------------------| --- |
-| `name` | 算子显示名称                             | 测试算子 |
-| `description` | 算子描述                               | 这是一个测试算子。 |
-| `language` | 算子使用的语言，当前仅支持python                | python |
-| `raw_id` | **关键字段**，必须与 `process.py` 中的类名完全一致 | TestMapper |
-| `version` | 语义化版本号                             | 1.0.0 |
-| `modal` / `inputs` / `outputs` | 支持的数据模态 (text/image/audio/video)   | text |
+1. **Clone 项目**：
+   ```bash
+   git clone <repository_url>
+   cd DataMate-Ops
+   ```
+2. **安装 uv** (如果尚未安装)：
+   请参考 [uv 官方文档](https://github.com/astral-sh/uv) 进行安装。
+3. **初始化环境与依赖**：
+   在项目根目录下执行，uv 会自动创建虚拟环境并同步所有依赖：
+   ```bash
+   uv sync
+   ```
 
-### 2.2 算子版本更新日志 (release)
+### 2. 使用 main.py 进行调试
 
-定义算子当前版本较上版本更新内容。
+项目根目录的 `main.py` 是一个专为开发者准备的测试桩（Test Stub）。它会自动读取 `./patho_sys_preprocess/dataset/source/` 下的 CSV 文件并调用算子执行。
 
-```yaml
-release:
-  - '首次发布'
-  - '支持基本处理操作'
-```
+#### 如何配置 main.py：
 
-### 2.2 运行时资源与指标 (runtime & metrics)
+1. **修改参数**：打开 `main.py`，在 `test_operator()` 函数中修改 `params` 字典，以匹配你想要测试的 UI 配置：
+   ```python
+   def test_operator():
+       params = {
+           'pathTransformer': '/storage:/mnt/ruipath/hospital_data/', # 对应 UI 的路径转换规则
+           'ignoreSdpc': False                                       # 对应 UI 的忽略开关
+       }
+       # ...
+   ```
+2. **准备测试数据**：确保 `./patho_sys_preprocess/dataset/source/` 目录下存放了用于测试的诊断 CSV 和切片 CSV。
+3. **运行调试**：
+   ```bash
+   uv run main.py
+   ```
 
-定义算子运行时的资源配额及性能指标参考。
-
-```yaml
-runtime:
-  memory: 10MB  # 内存限制
-  cpu: 1000m    # CPU 核心数 (m代表毫核)
-  gpu: 0.1      # GPU 卡数
-  npu: 0.1      # NPU 卡数
-  storage: 10MB # 存储空间
-
-metrics:        # 算子性能参考指标
-  - name: '吞吐量'
-    metric: '20 images/sec'
-  - name: '准确率'
-    metric: '99.5%'
-```
-
-### 2.3 参数设置 (settings) - UI 组件规范
-
-通过 `settings` 字段，开发者可以自定义用户在前端界面配置算子时的交互组件。系统支持以下类型：
-
-* **Slider (滑动条)** - 用于数值范围调整
-```yaml
-sliderParam:            # 参数的唯一标识符，process.py 中通过该参数获取值
-  name: '参数展示名称'    # 界面上显示给用户的参数标题
-  description: '参数展示描述'   # 用户鼠标悬停时显示的详细功能说明或帮助文本
-  type: 'slider'      # 组件类型
-  defaultVal: 0.5     # 算子加载时的初始值，必须位于 min 和 max 之间
-  required: false     # 是否必填
-  min: 0    # [下限] 滑动条允许调整的最小值
-  max: 1    # [上限] 滑动条允许调整的最大值
-  step: 0.1 # [步长] 每次拖动的增量 (例如 0.1 代表保留一位小数，1 代表整数)
-```
-
-* **Switch (开关)** - 用于布尔值控制
-```yaml
-switchParam:
-  name: '参数展示名称'
-  description: '参数展示描述'
-  type: 'switch'
-  defaultVal: 'true'        # 注意 yaml 中布尔值建议使用引号或标准写法
-  required: false           # 是否必须参数
-  checkedLabel: '选中'       # 选中时的展示
-  unCheckedLabel: '未选中'   # 未选中时的展示
-```
-
-* **Select / Radio (下拉 / 单选)** - 用于枚举选项
-```yaml
-selectParam:
-  name: '参数展示名称'
-  description: '参数展示描述'
-  type: 'select' # 或 'radio'
-  defaultVal: 'option1'   # 默认后端传递值，为options其中一个选项
-  required: false
-  options:
-    - label: '选项1'      # 前端显示标签
-      value: 'option1'   # 后端传递值
-    - label: '选项2'
-      value: 'option2'
-```
-
-* **Range (范围区间)**
-```yaml
-rangeParam:
-  name: '参数展示名称'
-  description: '参数展示描述'
-  type: 'range'
-  properties:
-    - name: 'rangeLeft'   # 范围下限
-      type: 'inputNumber'
-      defaultVal: 100
-      min: 0
-      max: 10000
-      step: 1
-    - name: 'rangeRight'  # 范围上限
-      type: 'inputNumber'
-      defaultVal: 8000
-      min: 0
-      max: 10000
-      step: 1
-```
-
-* **Checkbox (多选)**
-```yaml
-checkboxParam:
-  name: '参数展示名称'
-  description: '参数展示描述'
-  type: 'checkbox'
-  defaultVal: 'option1,option2'   # 多个值用逗号分隔
-  required: false
-  options:
-    - label: '选项1'
-      value: 'option1'
-    - label: '选项2'
-      value: 'option2'
-
-```
-
-* **Input (文本输入)**
-```yaml
-inputParam:
-  name: '参数展示名称'
-  description: '参数展示描述'
-  type: 'input'
-  defaultVal: '默认值'
-  required: false
-```
+通过查看控制台输出的 `OpsLogger` 日志，你可以观察数据的合并、路径转换以及 API 上传模拟过程。
 
 ---
 
-## 3. 核心逻辑实现 (`process.py`)
+## 算子简介
 
-`process.py` 是算子的执行主体。开发者需继承基础类并实现数据处理逻辑。
+本算子专门用于预处理从病理信息系统 (PIS) 或检验管理系统 (MIS) 导出的结构化表格数据。通过清理路径、过滤无效切片并关联诊断信息，生成可供标注任务或模型训练使用的数据集记录。
 
-### 开发规范
+- **脚本路径**: [patho_sys_preprocess/process.py](patho_sys_preprocess/process.py)
+- **元数据配置**: [patho_sys_preprocess/metadata.yml](patho_sys_preprocess/metadata.yml)
 
-1. **继承基类**：必须从 `datamate.core.base_op` 继承 `Mapper`或 `Filter`。
-2. **类名一致性**：Python 类名建议与后续 `metadata.yml` 中的 `raw_id` 保持一致。
-3. **Execute 方法**：必须实现 `execute` 方法，接收 `sample` (字典) 并返回处理后的字典。
+## 主要功能
 
-### 代码模板
-
-```python
-from typing import Dict, Any
-from datamate.core.base_op import Mapper
-
-class YourOperatorName(Mapper):
-    """
-    算子类名建议使用驼峰命名法定义，例如 TestMapper
-    """
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.slider_param = float(kwargs.get("sliderParam", 0.5))
-        self.switch_param = kwargs.get('switchParam', False)
-        self.select_param = kwargs.get('selectParam', '')
-        self.radio_param = kwargs.get('radioParam', '')
-        self.range_param = kwargs.get('rangeParam', [0, 0])
-        self.checkbox_param = kwargs.get('checkboxParam', [])
-        self.input_param = kwargs.get('inputParam', '').strip()
-    
-    def execute(self, sample: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        核心处理逻辑
-        :param sample: 输入的数据样本，通常包含 text_key 等字段
-        :return: 处理后的数据样本
-        """
-        # 示例：获取文本并进行修改
-        # input_text = sample['text']
-        # processed_text = do_something(input_text)
-        # sample['text'] = processed_text
-        
-        return sample
-
-```
+*   **多表关联**: 自动查找并合并诊断信息与切片路径。
+*   **路径转换**: 支持绝对路径替换、挂载点补全及路径原样保留。
+*   **WSI 特殊处理**: 针对 `.sdpc` 格式提供自动过滤规则（如缺失缩略图则剔除）。
+*   **自动上传**: 自动将处理后的元数据分批同步至 DataMate 后端 API。
 
 ---
 
-## 4. 算子注册 (`__init__.py`)
+## 详细参考
 
-`__init__.py` 用于将开发好的算子注册到系统中。
+### 1. 输入文件规范
 
-### 注册规范
+*   **诊断 CSV**: 必须包含字段 `case_no`, `diagnosis`。
+*   **切片 CSV**: 必须包含字段 `case_no`, `slide_path`；若包含 `thumbnail_path` 会被同步转换并上传。
+*   **输入 Sample**: 
+    *   `filePath` (str): 诊断表路径。
+    *   `export_path` (Path): 导出目标路径，其 `.name` 属性作为 API 端点的数据集 ID。
 
-使用 `OPERATORS.register_module` 方法进行注册。
+### 2. UI 参数配置 (Operator Settings)
 
-* **module_name**: 对应 `metadata.yml` 中的 `raw_id` 及 Python 类名。
-* **module_path**: 指向 `process.py` 的引用路径（注意路径层级）。
+在平台 UI 的算子设置区域，你可以看到以下可配置项：
 
-### 代码模板
+| UI 名称                  | 参数 Key          | 类型           | 默认值                                | 如何配置                                                                  |
+| :----------------------- | :---------------- | :------------- | :------------------------------------ | :------------------------------------------------------------------------ |
+| **路径转换规则**         | `pathTransformer` | 输入框 (Input) | `/storage:/mnt/ruipath/hospital_data` | 设置源文件路径如何映射到当前挂载环境（见下文）。                          |
+| **忽略 SDPC 格式的切片** | `ignoreSdpc`      | 开关 (Switch)  | `false (保留)`                        | **忽略**：剔除所有 .sdpc 文件；**保留**：尝试转换并保留有缩略图的 .sdpc。 |
 
-```python
-# -*- coding: utf-8 -*-
-from datamate.core.base_op import OPERATORS
+#### “路径转换规则”填法详解
 
-# 假设 process.py 位于 operator_package 目录下
-OPERATORS.register_module(
-    module_name='YourOperatorName',
-    module_path="ops.user.operator_package.process"
-)
+根据你的原始数据路径情况，在输入框中按以下格式填写：
 
-```
+*   **模式 A：保持路径不变**
+    - **填法**：输入 `<>`。
+    - **场景**：原始 CSV 中的路径已是当前平台环境下的正确绝对路径。
+
+*   **模式 B：相对路径补全**
+    - **填法**：直接输入挂载点的 **绝对路径**。
+    - **场景**：原始 CSV 中是相对路径（如 `slides/1.svs`），你需要将其补全为（如 `/mnt/data/slides/1.svs`）。
+    - **示例**：在 UI 中填写 `/mnt/data/`。
+
+*   **模式 C：前缀替换 (最常用)**
+    - **填法**：`旧前缀:新前缀`。
+    - **场景**：数据搬迁或挂载点变更。
+    - **示例**：如果旧路径是 `/storage/data/1.svs`，平台新挂载点是 `/mnt/hospital/`，则在 UI 中填写 `/storage/:/mnt/hospital/`。
+
+#### “忽略 SDPC”填法详解
+
+*   **开启 (忽略)**：开启后，所有以 `.sdpc` 结尾的切片记录都将被过滤掉，不导入数据集。
+*   **关闭 (保留)**：算子会检查 `.sdpc` 文件是否有对应的 `thumbnail_path`。若没有缩略图，该 `.sdpc` 仍会被自动剔除（WSI 必须有缩略图才能在标注端显示）。
+
+### 3. 处理逻辑与过滤规则
+
+1.  **查找切片表**: 算子会自动查找与诊断表同目录下的“非诊断表” CSV 文件。
+2.  **空值清理**: 剔除所有 `slide_path` 为空的行。
+3.  **SDPC 兼容性**: 
+    - 若 `ignoreSdpc` 为关闭状态，算子会检查 `.sdpc` 文件是否具有对应的 `thumbnail_path`。
+    - **无缩略图的 SDPC 切片会被自动剔除**，以保证标注端的正常显示。
+4.  **数据流向**:
+    - **分批上传**: 每 1000 条记录发起一次后端 API 请求。
+    - **Sample 更新**: `sample["text"]` 将存储最终关联成功的 JSON 字符串。
+
+### 4. 日志说明
+
+系统通过 `OpsLogger` 输出带有视觉标识的日志，便于在大量流水线日志中快速定位：
+- 🟢 信息: `🟧🟧🟧 [消息内容] 🟦🟦🟦`
+- 🔴 错误: `🟧🟧🟧 [错误详情] 🟦🟦🟦`
 
 ---
 
-## 5. 开发注意事项
+## 常见问题 (FAQ)
 
-1. **依赖管理**：如果算子依赖非标准库（如 pandas, numpy），请在 `requirements.txt` 中列出。
-2. **异常处理**：在 `process.py` 中建议添加适当的 try-catch 逻辑，避免单条数据异常导致整个任务崩溃。
-3. **数据类型**：在 `metadata.yml` 中定义的参数类型（如 slider 返回 float，input 返回 string），在 Python 代码中使用时需注意类型转换。
+- **Q: 为什么没找到切片文件？**  
+  A: 请确保医院图像存储已经成功挂载，并在容器中可访问。请检查文件权限是否可读。请检查是否存在多个图像存储来源，如果是，则都需要挂载。请检查 CSV 文件中的路径是否正确。
+  
+- **Q: 路径转换后的结果不对？**  
+  A: 请检查 `pathTransformer` 是否包含不必要的尾部斜杠，或确认源路径是否确实以配置的前缀开头。
 
----
-
-## 6. 算子打包与上传
-
-开发完成后，需将所有文件打包为一个压缩包进行上传。**包名必须严格遵循注册路径规范**。
-
-### 打包规范
-
-1. **文件完整性**：压缩包内必须包含 `__init__.py`, `metadata.yml`, `process.py` 及相关依赖。
-2. **命名一致性（重要）**：压缩包的文件名（不含后缀）必须与 `__init__.py` 中 `module_path` 所指定的**包目录名**保持一致。
-
-### 示例说明
-
-假设您在 `__init__.py` 中的注册代码如下：
-
-```python
-OPERATORS.register_module(
-    module_name='TestMapper',
-    # 这里 ops.user.my_custom_op.process 中的 'my_custom_op' 为包目录名
-    module_path="ops.user.my_custom_op.process"
-)
-
-```
-
-则您的压缩包名称必须命名为：
-
-> **`my_custom_op.zip`** (或 .tar)
-
-系统解压后将基于此名称构建导入路径，名称不一致将导致 `ModuleNotFoundError`。
+- **Q: 上传 API 报错 404/500？**  
+  A: 检查 `export_path` 指定的文件夹名在 DataMate 后端是否已预先创建为数据集。
